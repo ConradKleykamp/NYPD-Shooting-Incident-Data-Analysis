@@ -1,0 +1,233 @@
+---
+title: "NYPD Shooting Incident Data Analysis"
+author: "Conrad Kleykamp"
+date: "2023-01-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# NYPD Shooting Incident Data Analysis
+
+This data set contains information regarding shooting incidents in NYC neighborhoods from 01/01/2006 to 12/31/2021. This data is extracted quarterly and is reviewed by the Office of Management Analysis and Planning before it is posted on the NYPD website. Each row of data represents a single shooting incident. This data set is available for public access and use.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup/Loading Libraries
+
+These steps will ensure that all necessary packages and installed and loaded.
+
+```{r tidyverse}
+# Install and load tidyverse for future use
+install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+library(tidyverse)
+```
+
+```{r lubridate}
+# Load lubridate for future use
+library(lubridate)
+```
+
+```{r dplyr}
+# Load dplyr for future use
+library(dplyr)
+```
+
+```{r ggplot2_ggthemes}
+# Load ggplot2, ggthemes
+library(ggplot2)
+library(ggthemes)
+```
+
+## Importing the Data
+
+The data will be imported from the link available on the data.gov website. The link will be read in as 'NYPD_data' for ease of use. 
+
+```{r import_data}
+# Get data from online link
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+```
+
+```{r read_data}
+# Read data from link
+NYPD_data <- read_csv(url_in)
+```
+## Tidying and Transforming Data
+
+The following steps will ensure that the data is ready for further analysis. For this particular assignment, I chose to focus my analysis on solely the number of shooting incidents and deaths across time. Because of this, I have opted to remove several nonessential columns from the data set. Please note that a few retained columns were not necessary for this particular analysis. I have not filtered these out as I plan to return to this project and conduct further analyses.
+
+It should also be noted that some columns are empty for many shooting incidents, such as LOCATION_DESC, PERP_AGE_GROUP, PERP_SEX, and PERP_RACE. This is to be expected, as many shooting incidents are recorded after the fact and thus the identity of the perpetrator is unknown. If the reader of this project wished to analyze the demographics of the perpetrators, I would suggest to filter out all columns that are empty. I have not done this for my particular analysis, as I found that it would heavily skew the data and underrepresent the number of shooting incidents and deaths. 
+
+```{r remove_uneeded_columns}
+# Many of the columns in the original data set will not be needed for this analysis. 
+# I have opted to remove INCIDENT_KEY, PRECINCT, JURISDICTION_CODE, LOCATION_DESC, 
+# X_COORD_CD, Y_COORD_CD, Latitude, Longitude, Lon_Lat
+NYPD_data <- NYPD_data %>%
+  select(-c(INCIDENT_KEY, PRECINCT, JURISDICTION_CODE, LOCATION_DESC, 
+            X_COORD_CD, Y_COORD_CD, Latitude, Longitude, Lon_Lat))
+```
+
+```{r format_time}
+# Format OCCUR_TIME to hms
+NYPD_data <- NYPD_data %>%
+  mutate(OCCUR_TIME = hms(OCCUR_TIME))
+```
+
+```{r format_data}
+# Format OCCUR_DATE to mdy
+NYPD_data <- NYPD_data %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE))
+```
+
+```{r remove_outlier_values}
+# Upon quick inspection, several values in PERP_AGE_GROUP seemed incorrect.
+# These values have been removed to avoid potentially incorrect data.
+NYPD_data <- NYPD_data %>%
+  filter(PERP_AGE_GROUP != "940", PERP_AGE_GROUP != "1020", 
+         PERP_AGE_GROUP != "224")
+```
+
+```{r rename_column}
+# Rename STATISTICAL_MURDER_FLAG column to "MURDER" for ease of use
+NYPD_data <- NYPD_data %>%
+  rename(MURDER_FLAG = "STATISTICAL_MURDER_FLAG")
+```
+
+```{r view_data}
+# View a quick summary of the transformed data
+summary(NYPD_data)
+```
+
+## Analysis
+
+As mentioned above, I have opted to analyze the trend of shooting incidents and resulting deaths between the years of 2006 and 2021. The brief visualizations below will help provide rapid insight into any trends. Of course, one could also opt to analyze this data on a monthly or daily time frame for more refined trends. 
+
+```{r create_year_column}
+# Create YEAR column for analysis by year
+NYPD_data$YEAR <- year(NYPD_data$OCCUR_DATE)
+```
+
+```{r sorting_data_by_year}
+# Group shooting incidents by year
+NYPD_shootings_by_year <- NYPD_data %>%
+  group_by(YEAR) %>%
+  summarise(SHOOTING_INCIDENTS = n())
+```
+
+```{r plotting_shootings_by_year}
+# Plot shooting incidents by year
+NYPD_shootings_by_year %>%
+  ggplot(aes(x = YEAR, y = SHOOTING_INCIDENTS))+
+  geom_line(size = 2)+
+  theme_stata()+
+  ggtitle("NYC Shooting Incidents by Year")+
+  xlab("YEAR")+
+  ylab("SHOOTING INCIDENTS")+
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 2000))
+```
+
+The visualization above represents the trend of shooting incidents from 2006 to 2021. It is clear that there was a significant decrease in shooting incidents over this time period. This trend appeared to reverse before and during 2020. As I lack expertise in NYC law and crime policy, it would be intriguing to uncover whether or not particular policies or actions contributed to the significant decline in shooting incidents from 2006 onward. Moreover, I question whether or not the Covid-19 pandemic contributed to an increase in incidents during 2020 and beyond. 
+
+```{r sorting_deaths_by_year}
+# Sort shooting deaths by year
+NYPD_deaths_by_year <- NYPD_data %>%
+  group_by(YEAR) %>%
+  summarize(DEATHS = sum(MURDER_FLAG))
+```
+
+```{r plotting_deaths_by_year}
+# Plot shooting deaths by year
+NYPD_deaths_by_year %>%
+  ggplot(aes(x = YEAR, y = DEATHS))+
+  geom_line(size = 2)+
+  theme_stata()+
+  ggtitle("NYC Shooting Deaths by Year")+
+  xlab("YEAR")+
+  ylab("DEATHS")+
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 400))
+```
+
+The trend of deaths resulting from shooting incidents appears to closely resemble the prior visualization. It should be noted, however, that the number of deaths is far lesser than the number of shooting incidents. The similarity in trends suggests that shooting incidents and deaths may be linearly correlated. While this hypothesis may outwardly appear obvious, I will create models to support it. 
+
+## Modeling
+
+The first model will aim to model the number of deaths (monthly) as a function of total shootings.
+
+```{r create_month_column}
+# Create month column for future modeling
+NYPD_data$month <- NYPD_data$OCCUR_DATE %>%
+  month()
+```
+
+```{r modeling_shootings_and_deaths}
+# Model the number of deaths in a month as a function of the total shootings
+NYPD_total <- NYPD_data %>%
+  group_by(YEAR, month) %>%
+  summarise(SHOOTING_INCIDENTS = n(), DEATHS = sum(MURDER_FLAG))
+X <- NYPD_total$SHOOTING_INCIDENTS
+Y <- NYPD_total$DEATHS
+```
+
+```{r model_setup}
+# Model setup 
+model <- lm(Y ~ X)
+summary(model)
+```
+
+```{r model_visualization_1}
+# Plotting the model
+Y_predict <- predict(model)
+
+ggplot()+
+  geom_point(aes(x = X, y = Y), color = 'blue')+
+  geom_point(aes(x = X, y = Y_predict), color = 'red', show.legend = TRUE)+
+  scale_color_manual(name = 'Legend', values = c("Predicted Counts" = 'red'))+
+  theme_stata()+
+  ggtitle("Deaths as a Function of Shootings")+
+  xlab("SHOOTING INCIDENTS")+
+  ylab("DEATHS")
+```
+
+The model above shows a linear correlation between shooting incidents and deaths, i.e. as shooting incidents increase, so do the number of deaths. The blue circles represent actual data, while the red circles represent the projected linear trend. As mentioned above, the number of deaths is significantly lower than the number of shooting incidents. 
+
+The next model will aim to further prove the linear relationship between deaths and shooting incidents by deriving predicted shooting incidents from actual death counts. 
+
+```{r modeling_predicted_shooting_incidents}
+# model predicted shooting incidents
+NYPD_total_counts <- cbind(NYPD_shootings_by_year, NYPD_deaths_by_year[,"DEATHS"])
+model2 = lm(SHOOTING_INCIDENTS ~ DEATHS, data = NYPD_total_counts)
+NYPD_total_counts <- cbind(NYPD_total_counts, predCounts = predict(model2))
+```
+
+```{r model_visualization_2}
+# Plotting the model
+NYPD_total_counts[,c('YEAR', 'SHOOTING_INCIDENTS', 'predCounts')] %>%
+  group_by(YEAR) %>%
+  summarize(SHOOTING_INCIDENTS = sum(SHOOTING_INCIDENTS),
+            predCounts = sum(predCounts)) %>%
+  ggplot(aes(group = 1))+
+  geom_line(aes(x = YEAR, y = SHOOTING_INCIDENTS), color = 'blue')+
+  geom_line(aes(x = YEAR, y = predCounts), color = 'red', show.legend = TRUE)+
+  scale_color_manual(name = 'Legend', values = c("Predicted Deaths" = 'red'))+
+  theme_stata()+
+  ggtitle("Observed VS Predicted Shooting Incidents")+
+  xlab("YEAR")+
+  ylab("SHOOTING INCIDENTS")
+```
+
+The model above shows a close relationship between the predicted shooting incidents (red) and the actual shooting incidents (blue) over time. As the predicted incidents were derived from actual death counts, this further demonstrates a linear relationship between shooting incidents and deaths. 
+
+## Bias Sources
+
+1) Filtering out odd data
+During my transformation steps, I opted to remove potentially incorrect data. These data had improbable values for the perpetrator's age, such as 940, 224, and 1020. My bias led me to believe that this information may have been inputted incorrectly. While only a handful of incidents were filtered out, this ultimately must cause a small difference in my analysis.
+2) Crime in the US
+As a US citizen who follows current events, I am aware that this country has a difficult history with gun violence. Throughout this project, I was sure to not let any preconceived knowledge affect my analysis. 
+
+## Conclusion
+
+This brief analysis demonstrates similar trends between shooting incidents and shooting deaths from 2006 to 2021. More specifically, both shooting incidents and deaths have decreased significantly since 2006. However, there has been an uptick from 2019 onward. Furthermore, this analysis also suggests a positive, linear relationship between shooting incidents and deaths. In other words, as the number of shooting incidents increases, so does the number of deaths. 
+
+Upon returning to this project, one could analyze trends across months or days. Furthermore, one could attempt to analyze the demographics of both the perpetrators and of the victims. Lastly, I believe it would be interesting to view the number of incidents across each NYC neighborhood. I welcome whoever views my project to piggyback off of my work and make further discoveries! 
